@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agente de Refacciones Críticas · GM Fundición</title>
+<style>
+  :root {
+    --bg: #16181c;
+    --bg-panel: #1e2126;
+    --bg-row: #1a1d22;
+    --border: #2b2f36;
+    --text: #e8e8e6;
+    --text-dim: #8a8f98;
+    --amber: #f5a623;
+    --rojo: #e5484d;
+    --verde: #3fb950;
+    --mono: "SF Mono", "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  header h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: 0.2px; }
+  header .tag {
+    font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+    background: var(--bg-panel); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 3px;
+  }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #filtros {
+    padding: 14px 24px; display: flex; gap: 10px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--border); background: var(--bg-panel);
+  }
+  #filtros input, #filtros select {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 10px; border-radius: 4px; font-size: 13px;
+  }
+  #filtros input[type="text"] { flex: 1; min-width: 180px; }
+  #btn-exportar {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 7px 14px; border-radius: 4px; font-size: 13px; cursor: pointer;
+  }
+  #btn-exportar:hover { border-color: var(--amber); color: var(--amber); }
+  #kpis { display: flex; gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+  .kpi { flex: 1; background: var(--bg-panel); padding: 12px 20px; display: flex; flex-direction: column; gap: 2px; }
+  .kpi-num { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+  .kpi-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.4px; }
+  .kpi-alerta .kpi-num { color: var(--rojo); }
+  #stats { font-size: 11px; color: var(--text-dim); padding: 8px 24px; font-family: var(--mono); }
+  #tabla-wrap { flex: 1; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th {
+    position: sticky; top: 0; background: var(--bg-panel); text-align: left;
+    padding: 10px 12px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; font-size: 10px; letter-spacing: 0.4px;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  tbody td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:hover { background: var(--bg-row); }
+  .codigo { font-family: var(--mono); color: var(--amber); white-space: nowrap; }
+  .num { font-family: var(--mono); text-align: right; }
+  .stock-cero { color: var(--rojo); font-weight: 600; }
+  .estado { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 3px; border-left: 3px solid; white-space: nowrap; }
+  .estado-ok { border-color: var(--verde); color: var(--verde); }
+  .estado-sin { border-color: var(--rojo); color: var(--rojo); }
+
+  #chat { width: 380px; border-left: 1px solid var(--border); background: var(--bg-panel); display: flex; flex-direction: column; }
+  #chat-header { padding: 14px 18px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; color: var(--text-dim); }
+  #chat-msgs { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+  .msg-user { color: var(--text); align-self: flex-end; background: var(--bg); padding: 8px 12px; border-radius: 8px; max-width: 85%; }
+  .msg-bot { color: var(--text); }
+  .msg-dim { color: var(--text-dim); font-style: italic; }
+  #chat-input-wrap { display: flex; gap: 8px; padding: 14px; border-top: 1px solid var(--border); }
+  #chat-input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 9px 12px; border-radius: 6px; font-size: 13px; resize: none; }
+  #chat-send { background: var(--amber); color: #1a1400; border: none; padding: 0 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  #chat-send:disabled { opacity: 0.5; cursor: default; }
+</style>
+</head>
+<body>
+
+<div id="main">
+  <header>
+    <h1>Agente de Refacciones Críticas</h1>
+    <span class="tag">GM Fundición de Aluminio · Toluca</span>
+  </header>
+  <div id="filtros">
+    <input type="text" id="f-texto" placeholder="Buscar por código, no. parte o descripción…">
+    <select id="f-taller"><option value="">Todos los talleres</option></select>
+    <select id="f-cruce">
+      <option value="">Todo estado de cruce</option>
+      <option value="ok">Cruzado con ZMADE</option>
+      <option value="sin">Sin cruce</option>
+    </select>
+    <select id="f-stock">
+      <option value="">Todo el stock</option>
+      <option value="cero">Stock en cero</option>
+      <option value="bajo">Bajo mínimo</option>
+    </select>
+    <button id="btn-exportar">⭳ Exportar CSV</button>
+  </div>
+  <div id="kpis">
+    <div class="kpi"><span class="kpi-num" id="kpi-total">—</span><span class="kpi-label">Refacciones</span></div>
+    <div class="kpi"><span class="kpi-num" id="kpi-match">—</span><span class="kpi-label">Cruzadas con ZMADE</span></div>
+    <div class="kpi kpi-alerta"><span class="kpi-num" id="kpi-sinstock">—</span><span class="kpi-label">En stock cero</span></div>
+    <div class="kpi"><span class="kpi-num" id="kpi-bajo">—</span><span class="kpi-label">Bajo mínimo</span></div>
+    <div class="kpi" id="kpi-tendencia-wrap" style="display:none;">
+      <span class="kpi-num" id="kpi-tendencia">—</span><span class="kpi-label">Vs. corrida anterior</span>
+    </div>
+  </div>
+  <div id="stats"></div>
+  <div id="tabla-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Código GM</th>
+          <th>No. Parte Fabric.</th>
+          <th>Descripción</th>
+          <th>Taller</th>
+          <th>Fabricante</th>
+          <th>Stock SAP</th>
+          <th>Mín / Máx</th>
+          <th>Costo Unit. MXN</th>
+          <th>Lead Time</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="chat">
+  <div id="chat-header">Preguntar al agente</div>
+  <div id="chat-msgs">
+    <div class="msg msg-dim">Pregunta en lenguaje natural, ej. "¿qué refacciones de Core Room están sin cruce con SAP?"</div>
+  </div>
+  <div id="chat-input-wrap">
+    <textarea id="chat-input" rows="1" placeholder="Escribe tu pregunta…"></textarea>
+    <button id="chat-send">Enviar</button>
+  </div>
+</div>
+
+<script>
+const WORKER_URL = "https://agente-refacciones-proxy.TU-SUBDOMINIO.workers.dev"; // <-- edita esto tras desplegar el Worker
+
+let REFACCIONES = [];
+
+async function cargarDatos() {
+  const resp = await fetch("data/maestro.json?_=" + Date.now());
+  const json = await resp.json();
+  REFACCIONES = json.refacciones || [];
+  poblarTalleres();
+  renderTabla();
+  renderKpis();
+  cargarTendencia();
+}
+
+function poblarTalleres() {
+  const talleres = [...new Set(REFACCIONES.map(r => r.taller).filter(Boolean))].sort();
+  const sel = document.getElementById("f-taller");
+  talleres.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t; opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+function filtrar() {
+  const texto = document.getElementById("f-texto").value.toLowerCase();
+  const taller = document.getElementById("f-taller").value;
+  const cruce = document.getElementById("f-cruce").value;
+  const stockFiltro = document.getElementById("f-stock").value;
+
+  return REFACCIONES.filter(r => {
+    if (texto && !((r.codigo_gm||"").toLowerCase().includes(texto)
+        || (r.no_parte_fabricante||"").toLowerCase().includes(texto)
+        || (r.descripcion||"").toLowerCase().includes(texto))) return false;
+    if (taller && r.taller !== taller) return false;
+    if (cruce === "ok" && r.fuente_stock_sap !== "OK - cruzado con ZMADE") return false;
+    if (cruce === "sin" && r.fuente_stock_sap === "OK - cruzado con ZMADE") return false;
+    if (stockFiltro === "cero" && !(r.stock_sap === 0 || r.stock_sap == null)) return false;
+    if (stockFiltro === "bajo" && !(r.stock_sap != null && r.min != null && r.stock_sap < r.min)) return false;
+    return true;
+  });
+}
+
+function fmtNum(v, dec = 0) {
+  if (v == null) return "—";
+  return Number(v).toLocaleString("es-MX", { maximumFractionDigits: dec });
+}
+
+function renderTabla() {
+  const datos = filtrar();
+  const body = document.getElementById("tabla-body");
+  body.innerHTML = datos.map(r => {
+    const cruzado = r.fuente_stock_sap === "OK - cruzado con ZMADE";
+    return `
+    <tr>
+      <td class="codigo">${r.codigo_gm ?? ""}</td>
+      <td class="codigo">${r.no_parte_fabricante ?? ""}</td>
+      <td>${r.descripcion ?? ""}</td>
+      <td>${r.taller ?? ""}</td>
+      <td>${r.fabricante_sap ?? r.fabricante_matriz ?? ""}</td>
+      <td class="num ${r.stock_sap === 0 || r.stock_sap == null ? "stock-cero" : ""}">${fmtNum(r.stock_sap)}</td>
+      <td class="num">${fmtNum(r.min)} / ${fmtNum(r.max)}</td>
+      <td class="num">${r.costo_unitario_mxn != null ? "$" + fmtNum(r.costo_unitario_mxn, 2) : "—"}</td>
+      <td class="num">${r.lead_time_dias != null ? fmtNum(r.lead_time_dias) + "d" : "—"}</td>
+      <td><span class="estado ${cruzado ? "estado-ok" : "estado-sin"}">${cruzado ? "Cruzado" : "Sin cruce"}</span></td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("stats").textContent = `${datos.length} de ${REFACCIONES.length} refacciones`;
+}
+
+function renderKpis() {
+  const total = REFACCIONES.length;
+  const cruzadas = REFACCIONES.filter(r => r.fuente_stock_sap === "OK - cruzado con ZMADE").length;
+  const sinStock = REFACCIONES.filter(r => r.stock_sap === 0 || r.stock_sap == null).length;
+  const bajoMinimo = REFACCIONES.filter(r => r.stock_sap != null && r.min != null && r.stock_sap < r.min).length;
+
+  document.getElementById("kpi-total").textContent = total;
+  document.getElementById("kpi-match").textContent = total ? Math.round((cruzadas / total) * 100) + "%" : "—";
+  document.getElementById("kpi-sinstock").textContent = sinStock;
+  document.getElementById("kpi-bajo").textContent = bajoMinimo;
+}
+
+async function cargarTendencia() {
+  try {
+    const resp = await fetch("data/historial_kpis.json?_=" + Date.now());
+    if (!resp.ok) return;
+    const historial = await resp.json();
+    if (!Array.isArray(historial) || historial.length < 2) return;
+    const actual = historial[historial.length - 1];
+    const anterior = historial[historial.length - 2];
+    const diff = (actual.sin_stock ?? 0) - (anterior.sin_stock ?? 0);
+    const wrap = document.getElementById("kpi-tendencia-wrap");
+    const el = document.getElementById("kpi-tendencia");
+    wrap.style.display = "flex";
+    if (diff > 0) { el.textContent = `▲ +${diff}`; el.style.color = "var(--rojo)"; }
+    else if (diff < 0) { el.textContent = `▼ ${diff}`; el.style.color = "var(--verde)"; }
+    else { el.textContent = "= 0"; el.style.color = "var(--text-dim)"; }
+  } catch (e) { /* sin historial aún */ }
+}
+
+["f-texto","f-taller","f-cruce","f-stock"].forEach(id =>
+  document.getElementById(id).addEventListener("input", renderTabla)
+);
+
+function exportarCSV() {
+  const datos = filtrar();
+  if (!datos.length) return;
+  const cols = ["codigo_gm","no_parte_fabricante","descripcion","taller","fabricante_sap",
+                "stock_sap","min","max","costo_unitario_mxn","lead_time_dias","fuente_stock_sap"];
+  const filas = [cols.join(",")];
+  datos.forEach(r => {
+    filas.push(cols.map(c => {
+      const v = r[c] ?? "";
+      const s = String(v).replace(/"/g, '""');
+      return /[",\n]/.test(s) ? `"${s}"` : s;
+    }).join(","));
+  });
+  const blob = new Blob(["\uFEFF" + filas.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `refacciones_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+document.getElementById("btn-exportar").addEventListener("click", exportarCSV);
+
+// ---- Chat ----
+const chatMsgs = document.getElementById("chat-msgs");
+const chatInput = document.getElementById("chat-input");
+const chatSend = document.getElementById("chat-send");
+
+function agregarMsg(texto, clase) {
+  const div = document.createElement("div");
+  div.className = "msg " + clase;
+  div.textContent = texto;
+  chatMsgs.appendChild(div);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  return div;
+}
+
+async function enviarPregunta() {
+  const pregunta = chatInput.value.trim();
+  if (!pregunta) return;
+  agregarMsg(pregunta, "msg-user");
+  chatInput.value = "";
+  chatSend.disabled = true;
+  const loading = agregarMsg("Consultando…", "msg-dim");
+
+  try {
+    const resp = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pregunta, refacciones: REFACCIONES }),
+    });
+    const data = await resp.json();
+    loading.remove();
+    agregarMsg(data.respuesta || data.error || "Sin respuesta.", "msg-bot");
+    if (data.fuentes && data.fuentes.length) {
+      agregarMsg("Fuentes: " + data.fuentes.join(" · "), "msg-dim");
+    }
+  } catch (e) {
+    loading.remove();
+    agregarMsg("No se pudo contactar al agente. Revisa la configuración del Worker.", "msg-dim");
+  } finally {
+    chatSend.disabled = false;
+  }
+}
+
+chatSend.addEventListener("click", enviarPregunta);
+chatInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviarPregunta(); }
+});
+
+cargarDatos();
+</script>
+
+</body>
+</html>
