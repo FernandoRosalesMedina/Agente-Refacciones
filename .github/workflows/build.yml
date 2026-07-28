@@ -1,0 +1,50 @@
+name: Reconstruir datos del agente
+
+on:
+  push:
+    paths:
+      - "data/matriz_criticidad.xlsx"
+      - "data/ZMADE.csv"
+      - "data/ZMADE.xlsx"
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install pandas openpyxl
+
+      - name: Cruzar matriz de criticidad con ZMADE
+        run: |
+          if [ -f "data/ZMADE.csv" ]; then
+            ZMADE_FILE="data/ZMADE.csv"
+          else
+            ZMADE_FILE="data/ZMADE.xlsx"
+          fi
+          echo "Usando: $ZMADE_FILE"
+          python scripts/generar_datos.py data/matriz_criticidad.xlsx "$ZMADE_FILE"
+
+      - name: Verificar alertas de stock crítico
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: python scripts/verificar_alertas.py
+
+      - name: Commit del JSON actualizado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/maestro.json data/historial_kpis.json
+          git diff --staged --quiet && echo "Sin cambios" || git commit -m "Actualiza maestro.json e historial [auto]"
+          git push
